@@ -32,8 +32,27 @@ onMounted(() => {
 })
 
 async function fetchTasks() {
-  const { data, error } = await supabase.from('tasks').select('*')
-  if (error) console.error("Erreur fetch:", error); else tasks.value = data || []
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError) {
+    console.error('Erreur récupération utilisateur:', userError)
+    return
+  }
+  if (!userData?.user) {
+    tasks.value = []
+    return
+  }
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('user_id', userData.user.id)
+
+  if (error) {
+    console.error('Erreur fetch:', error)
+    tasks.value = []
+  } else {
+    tasks.value = data || []
+  }
 }
 
 function processDeadlineInput(deadlineInput) {
@@ -44,21 +63,36 @@ function processDeadlineInput(deadlineInput) {
 }
 
 async function addTask() {
-  event.preventDefault();
-  if (newTaskTitle.value.trim() === '') return;
-  const { data: { user } } = await supabase.auth.getUser()
-  const deadline = processDeadlineInput(newTaskDeadline.value);
-  const { error } = await supabase.from('tasks').insert([{ 
-    title: newTaskTitle.value, 
-    urgency: newTaskUrgency.value, 
-    importance: newTaskImportance.value, 
-    user_id: user.id, 
-    comment: newTaskComment.value, 
-    deadline: deadline,
-    kanban_status: 'backlog'
-  }]);
-  if (error) { console.error("Erreur add:", error); } 
-  else { await fetchTasks(); newTaskTitle.value = ''; newTaskUrgency.value = 5; newTaskImportance.value = 5; newTaskComment.value = ''; newTaskDeadline.value = ''; }
+  if (newTaskTitle.value.trim() === '') return
+
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError || !userData?.user) {
+    console.error('Impossible de récupérer l’utilisateur avant insertion:', userError)
+    return
+  }
+
+  const deadline = processDeadlineInput(newTaskDeadline.value)
+  const { error } = await supabase.from('tasks').insert([
+    {
+      title: newTaskTitle.value,
+      urgency: newTaskUrgency.value,
+      importance: newTaskImportance.value,
+      user_id: userData.user.id,
+      comment: newTaskComment.value,
+      deadline: deadline,
+      kanban_status: 'backlog'
+    }
+  ])
+  if (error) {
+    console.error('Erreur add:', error)
+  } else {
+    await fetchTasks()
+    newTaskTitle.value = ''
+    newTaskUrgency.value = 5
+    newTaskImportance.value = 5
+    newTaskComment.value = ''
+    newTaskDeadline.value = ''
+  }
 }
 
 function getQuadrantForTask(task) {
@@ -69,19 +103,30 @@ function getQuadrantForTask(task) {
 }
 
 async function toggleTaskComplete(task) {
-  const isCompleting = !task.isComplete;
-  if (isCompleting && synth) { synth.triggerAttackRelease("C5", "8n"); }
-  
-  const { error } = await supabase.from('tasks').update({ 
-    isComplete: true, 
-    archived_from_quadrant: getQuadrantForTask(task), 
-    archived_at: new Date() 
-  }).eq('id', task.id);
+  const isCompleting = !task.isComplete
+  if (isCompleting && synth) {
+    synth.triggerAttackRelease('C5', '8n')
+  }
 
-  if (error) { console.error("Erreur update:", error); } 
-  else { 
-    const taskInList = tasks.value.find(t => t.id === task.id);
-    if (taskInList) taskInList.isComplete = true;
+  const updates = {
+    isComplete: isCompleting,
+    archived_from_quadrant: isCompleting ? getQuadrantForTask(task) : null,
+    archived_at: isCompleting ? new Date() : null
+  }
+
+  const { error } = await supabase.from('tasks').update(updates).eq('id', task.id)
+
+  if (error) {
+    console.error('Erreur update:', error)
+  } else {
+    const taskInList = tasks.value.find(t => t.id === task.id)
+    if (taskInList) {
+      Object.assign(taskInList, {
+        isComplete: isCompleting,
+        archived_from_quadrant: updates.archived_from_quadrant,
+        archived_at: updates.archived_at instanceof Date ? updates.archived_at.toISOString() : null
+      })
+    }
   }
 }
 
