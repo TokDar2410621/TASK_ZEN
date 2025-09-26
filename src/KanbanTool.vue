@@ -67,11 +67,24 @@ function getSubtasksForTask(taskId) {
   return subTasks.value.filter(st => st.task_id === taskId)
 }
 
+function getCompletionStats(taskId) {
+  const relevantSubtasks = getSubtasksForTask(taskId)
+  const total = relevantSubtasks.length
+  const completed = relevantSubtasks.filter(st => st.is_complete).length
+  const percentage = total === 0 ? 0 : Math.round((completed / total) * 100)
+  return { total, completed, percentage }
+}
+
 function getCompletionPercentage(taskId) {
-  const relevantSubtasks = getSubtasksForTask(taskId);
-  if (relevantSubtasks.length === 0) return 0;
-  const completed = relevantSubtasks.filter(st => st.is_complete).length;
-  return (completed / relevantSubtasks.length) * 100;
+  return getCompletionStats(taskId).percentage
+}
+
+function getCompletionLabel(taskId) {
+  const { total, completed, percentage } = getCompletionStats(taskId)
+  if (total === 0) {
+    return 'Aucune étape'
+  }
+  return `${completed}/${total} — ${percentage}%`
 }
 
 async function addSubtask(task) {
@@ -121,6 +134,11 @@ function startEditingSubtask(subtask) {
 
 function cancelEditingSubtask() {
     editingSubtaskId.value = null;
+    editSubtaskTitle.value = '';
+    editSubtaskComment.value = '';
+    editSubtaskDeadline.value = '';
+    showEditComment.value = false;
+    showEditDeadline.value = false;
 }
 
 async function saveSubtaskChanges() {
@@ -165,7 +183,11 @@ function formatDateTimeForInput(isoString) {
         <div v-for="task in activeTasks" :key="task.id" class="p-4 rounded-lg bg-background-light dark:bg-background-dark border border-border-light dark:border-border-dark">
           <h4 @click="toggleExpand(task.id)" class="font-bold cursor-pointer text-lg">{{ task.title }}</h4>
           <p v-if="task.comment" class="text-sm text-text-secondary-light dark:text-text-secondary-dark italic my-2">{{ task.comment }}</p>
-          <div class="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full my-2">
+          <div class="flex items-center justify-between text-xs text-text-secondary-light dark:text-text-secondary-dark mt-2">
+            <span>{{ getCompletionLabel(task.id) }}</span>
+            <span v-if="getCompletionPercentage(task.id) === 100 && getCompletionStats(task.id).total > 0" class="text-green-600 font-semibold">Terminé</span>
+          </div>
+          <div class="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full mt-1">
             <div class="h-1.5 bg-primary rounded-full transition-all" :style="{ width: getCompletionPercentage(task.id) + '%' }"></div>
           </div>
 
