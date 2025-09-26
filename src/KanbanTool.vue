@@ -15,13 +15,48 @@ const showEditComment = ref(false)
 const showEditDeadline = ref(false)
 
 async function fetchData() {
-  const { data: tasksData } = await supabase.from('tasks').select('*').in('kanban_status', ['todo', 'inprogress']).eq('isComplete', false)
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError) {
+    console.error('Erreur récupération utilisateur:', userError)
+    return
+  }
+  if (!userData?.user) {
+    tasks.value = []
+    subTasks.value = []
+    return
+  }
+
+  const { data: tasksData, error: tasksError } = await supabase
+    .from('tasks')
+    .select('*')
+    .in('kanban_status', ['todo', 'inprogress'])
+    .eq('isComplete', false)
+    .eq('user_id', userData.user.id)
+
+  if (tasksError) {
+    console.error('Erreur chargement tâches Kanban:', tasksError)
+    tasks.value = []
+    subTasks.value = []
+    return
+  }
+
   tasks.value = tasksData || []
 
-  const taskIds = tasks.value.map(t => t.id);
+  const taskIds = tasks.value.map(t => t.id)
   if (taskIds.length > 0) {
-    const { data: subTasksData } = await supabase.from('sub_tasks').select('*').in('task_id', taskIds)
-    subTasks.value = subTasksData || []
+    const { data: subTasksData, error: subTasksError } = await supabase
+      .from('sub_tasks')
+      .select('*')
+      .in('task_id', taskIds)
+
+    if (subTasksError) {
+      console.error('Erreur chargement sous-tâches:', subTasksError)
+      subTasks.value = []
+    } else {
+      subTasks.value = subTasksData || []
+    }
+  } else {
+    subTasks.value = []
   }
 }
 onMounted(fetchData)
