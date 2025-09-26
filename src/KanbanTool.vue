@@ -112,6 +112,15 @@ async function toggleSubtask(subtask) {
   }
 }
 
+async function deleteSubtask(subtask) {
+  const { error } = await supabase.from('sub_tasks').delete().eq('id', subtask.id)
+  if (error) {
+    console.error('Erreur suppression sous-tâche :', error)
+  } else {
+    subTasks.value = subTasks.value.filter(st => st.id !== subtask.id)
+  }
+}
+
 async function markTaskAsComplete(task) {
   if (!confirm("Voulez-vous marquer cette tâche comme terminée et l'archiver ? Elle disparaîtra également de la Matrice.")) return
   const { error } = await supabase.from('tasks').update({ isComplete: true, kanban_status: 'archived', archived_at: new Date() }).eq('id', task.id)
@@ -199,7 +208,16 @@ function formatDateTimeForInput(isoString) {
                             <input type="checkbox" :checked="st.is_complete" @change="toggleSubtask(st)" class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
                             <span :class="{ 'line-through text-text-secondary-light dark:text-text-secondary-dark': st.is_complete }" class="ml-2 text-sm font-medium">{{ st.title }}</span>
                         </div>
-                        <button @click="startEditingSubtask(st)" class="text-slate-400 hover:text-primary text-sm"><span class="material-symbols-outlined">edit</span></button>
+                        <div class="flex items-center gap-2">
+                          <button @click="startEditingSubtask(st)" class="text-slate-400 hover:text-primary text-sm"><span class="material-symbols-outlined">edit</span></button>
+                          <button
+                            @click="confirm('Supprimer cette étape ?') && deleteSubtask(st)"
+                            class="text-slate-400 hover:text-red-500 text-sm"
+                            title="Supprimer l'étape"
+                          >
+                            <span class="material-symbols-outlined">delete</span>
+                          </button>
+                        </div>
                     </div>
                      <p v-if="st.comment" class="text-xs text-text-secondary-light dark:text-text-secondary-dark italic mt-1 ml-6">{{ st.comment }}</p>
                      <p v-if="st.deadline" class="text-xs text-text-secondary-light dark:text-text-secondary-dark mt-1 ml-6">Délai: {{ new Date(st.deadline).toLocaleDateString() }}</p>
